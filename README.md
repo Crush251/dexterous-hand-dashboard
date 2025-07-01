@@ -1,5 +1,7 @@
-# 灵巧手 Linker Hand L10/O7 控制面板
+# 🚀 灵巧手 Linker Hand L10/O7 控制面板
 
+![# Dexterous Hand Dashboard  ](assets/banner.png)
+[English](README.md)
 一个基于Web的灵巧手控制面板，支持L10和O7两种设备型号，提供直观的图形化界面来控制机械手的手指关节、掌部姿态和动画效果。
 
 ## 🚀 主要特性
