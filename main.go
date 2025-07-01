@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -21,13 +22,13 @@ import (
 const HAND_TYPE_LEFT = 0x28
 const HAND_TYPE_RIGHT = 0x27
 
-// O7_MODIFIED: 设备型号常量
+// addo7:O7_MODIFIED: 设备型号常量
 const (
 	DEVICE_TYPE_L10 = "L10" // L10型号
 	DEVICE_TYPE_O7  = "O7"  // O7型号
 )
 
-// O7_MODIFIED: 设备型号配置
+// addo7:O7_MODIFIED: 设备型号配置
 var (
 	// 全局默认设备型号，可通过命令行参数修改
 	defaultDeviceType = DEVICE_TYPE_L10
@@ -39,7 +40,7 @@ type FingerPoseRequest struct {
 	Pose       []byte `json:"pose" binding:"required"`
 	HandType   string `json:"handType,omitempty"`   // 手型类型
 	HandId     uint32 `json:"handId,omitempty"`     // CAN ID
-	DeviceType string `json:"deviceType,omitempty"` // O7_MODIFIED: 设备型号
+	DeviceType string `json:"deviceType,omitempty"` // addo7:O7_MODIFIED: 设备型号
 }
 
 type PalmPoseRequest struct {
@@ -47,7 +48,7 @@ type PalmPoseRequest struct {
 	Pose       []byte `json:"pose" binding:"required,len=4"`
 	HandType   string `json:"handType,omitempty"`   // 手型类型
 	HandId     uint32 `json:"handId,omitempty"`     // CAN ID
-	DeviceType string `json:"deviceType,omitempty"` // O7_MODIFIED: 设备型号
+	DeviceType string `json:"deviceType,omitempty"` // addo7:O7_MODIFIED: 设备型号
 }
 
 type AnimationRequest struct {
@@ -56,16 +57,16 @@ type AnimationRequest struct {
 	Speed      int    `json:"speed" binding:"min=0,max=2000"`
 	HandType   string `json:"handType,omitempty"`   // 手型类型
 	HandId     uint32 `json:"handId,omitempty"`     // CAN ID
-	DeviceType string `json:"deviceType,omitempty"` // O7_MODIFIED: 设备型号
+	DeviceType string `json:"deviceType,omitempty"` // addo7:O7_MODIFIED: 设备型号
 }
 
-// O7_MODIFIED: 速度设置请求
+// addo7:O7_MODIFIED: 速度设置请求
 type SpeedRequest struct {
 	Interface  string `json:"interface,omitempty"`
 	Speeds     []byte `json:"speeds" binding:"required"`
 	HandType   string `json:"handType,omitempty"`   // 手型类型
 	HandId     uint32 `json:"handId,omitempty"`     // CAN ID
-	DeviceType string `json:"deviceType,omitempty"` // 设备型号
+	DeviceType string `json:"deviceType,omitempty"` // addo7:O7_MODIFIED: 设备型号
 }
 
 // 手型设置请求
@@ -73,7 +74,7 @@ type HandTypeRequest struct {
 	Interface  string `json:"interface" binding:"required"`
 	HandType   string `json:"handType" binding:"required,oneof=left right"`
 	HandId     uint32 `json:"handId" binding:"required"`
-	DeviceType string `json:"deviceType,omitempty"` // O7_MODIFIED: 设备型号
+	DeviceType string `json:"deviceType,omitempty"` // addo7:O7_MODIFIED: 设备型号
 }
 
 // CAN 服务请求结构体
@@ -93,7 +94,7 @@ type SensorData struct {
 	Pinky        int       `json:"pinky"`
 	PalmPosition []byte    `json:"palmPosition"`
 	LastUpdate   time.Time `json:"lastUpdate"`
-	DeviceType   string    `json:"deviceType,omitempty"` // O7_MODIFIED: 设备型号
+	DeviceType   string    `json:"deviceType,omitempty"` // addo7:O7_MODIFIED: 设备型号
 }
 
 // API 响应结构体
@@ -110,14 +111,14 @@ type Config struct {
 	WebPort             string
 	DefaultInterface    string
 	AvailableInterfaces []string
-	DeviceType          string // O7_MODIFIED: 设备型号配置
+	DeviceType          string // addo7:O7_MODIFIED: 设备型号配置
 }
 
 // 手型配置结构体
 type HandConfig struct {
-	HandType   string `json:"handType"`
-	HandId     uint32 `json:"handId"`
-	DeviceType string `json:"deviceType"` // O7_MODIFIED: 设备型号
+	HandType   string `json:"handType"`   // 手型类型
+	HandId     uint32 `json:"handId"`     // CAN ID
+	DeviceType string `json:"deviceType"` // addo7:O7_MODIFIED: 设备型号
 }
 
 // 全局变量
@@ -139,11 +140,11 @@ func parseConfig() *Config {
 
 	// 命令行参数
 	var canInterfacesFlag string
-	flag.StringVar(&cfg.CanServiceURL, "can-url", "http://192.168.128.35:5260", "CAN 服务的 URL")
+	flag.StringVar(&cfg.CanServiceURL, "can-url", "http://localhost:5260", "CAN 服务的 URL")
 	flag.StringVar(&cfg.WebPort, "port", "9099", "Web 服务的端口")
 	flag.StringVar(&cfg.DefaultInterface, "interface", "", "默认 CAN 接口")
 	flag.StringVar(&canInterfacesFlag, "can-interfaces", "", "支持的 CAN 接口列表，用逗号分隔 (例如: can0,can1,vcan0)")
-	// O7_MODIFIED: 添加设备类型参数
+	// addo7:O7_MODIFIED: 默认设备类型参数
 	flag.StringVar(&cfg.DeviceType, "device-type", defaultDeviceType, "设备类型 (L10 或 O7)")
 	flag.Parse()
 
@@ -160,7 +161,7 @@ func parseConfig() *Config {
 	if envInterfaces := os.Getenv("CAN_INTERFACES"); envInterfaces != "" {
 		canInterfacesFlag = envInterfaces
 	}
-	// O7_MODIFIED: 添加设备类型环境变量
+	// addo7:O7_MODIFIED: 默认设备类型环境变量
 	if envDeviceType := os.Getenv("DEVICE_TYPE"); envDeviceType != "" {
 		cfg.DeviceType = envDeviceType
 	}
@@ -238,7 +239,7 @@ func isValidInterface(ifName string) bool {
 	return false
 }
 
-// 获取或创建手型配置
+// addo7:O7_MODIFIED: 获取或创建手型配置
 func getHandConfig(ifName string) *HandConfig {
 	handConfigMutex.RLock()
 	if handConfig, exists := handConfigs[ifName]; exists {
@@ -260,7 +261,7 @@ func getHandConfig(ifName string) *HandConfig {
 	handConfigs[ifName] = &HandConfig{
 		HandType:   "right",
 		HandId:     HAND_TYPE_RIGHT,
-		DeviceType: config.DeviceType, // O7_MODIFIED: 使用全局设备类型
+		DeviceType: config.DeviceType, // addo7:O7_MODIFIED: 使用全局设备类型
 	}
 
 	log.Printf("🆕 为接口 %s 创建默认手型配置: 右手 (0x%X), 设备类型: %s",
@@ -282,7 +283,7 @@ func setHandConfig(ifName, handType string, handId uint32) {
 	handConfigs[ifName] = &HandConfig{
 		HandType:   handType,
 		HandId:     handId,
-		DeviceType: deviceType, // O7_MODIFIED: 保持现有设备类型或使用默认值
+		DeviceType: deviceType, // addo7:O7_MODIFIED: 保持现有设备类型或使用默认值
 	}
 
 	log.Printf("🔧 接口 %s 手型配置已更新: %s (0x%X), 设备类型: %s",
@@ -316,7 +317,7 @@ func initService() {
 	log.Printf("   - Web 端口: %s", config.WebPort)
 	log.Printf("   - 可用接口: %v", config.AvailableInterfaces)
 	log.Printf("   - 默认接口: %s", config.DefaultInterface)
-	log.Printf("   - 设备类型: %s", config.DeviceType) // O7_MODIFIED: 显示设备类型
+	log.Printf("   - 设备类型: %s", config.DeviceType) // addo7:O7_MODIFIED: 显示设备类型
 
 	// 初始化传感器数据映射
 	sensorDataMap = make(map[string]*SensorData)
@@ -330,7 +331,7 @@ func initService() {
 			Pinky:        0,
 			PalmPosition: []byte{128, 128, 128, 128},
 			LastUpdate:   time.Now(),
-			DeviceType:   config.DeviceType, // O7_MODIFIED: 设置设备类型
+			DeviceType:   config.DeviceType, // addo7:O7_MODIFIED: 设置设备类型
 		}
 	}
 
@@ -372,7 +373,7 @@ func sendToCanService(msg CanMessage) error {
 	return nil
 }
 
-// O7_MODIFIED: 创建适合不同设备类型的CAN消息
+// addo7:O7_MODIFIED: 创建适合不同设备类型的CAN消息
 func createFingerPoseMessage(handConfig *HandConfig, ifName string, pose []byte, canId uint32) CanMessage {
 	var data []byte
 
@@ -400,9 +401,15 @@ func createFingerPoseMessage(handConfig *HandConfig, ifName string, pose []byte,
 	}
 }
 
-// 发送手指姿态指令 - 支持设备类型
+// addo7:O7_MODIFIED: 发送手指姿态指令 - 支持设备类型
 func sendFingerPose(ifName string, pose []byte, handType string, handId uint32) error {
-	// O7_MODIFIED: 根据设备类型验证数据长度
+
+	if len(pose) == 7 {
+		config.DeviceType = DEVICE_TYPE_O7
+	} else {
+		config.DeviceType = DEVICE_TYPE_L10
+	}
+	// addo7:O7_MODIFIED: 根据设备类型验证数据长度
 	deviceType := config.DeviceType
 	if handConfig, exists := handConfigs[ifName]; exists {
 		deviceType = handConfig.DeviceType
@@ -418,6 +425,10 @@ func sendFingerPose(ifName string, pose []byte, handType string, handId uint32) 
 			return fmt.Errorf("L10设备需要6个关节值")
 		}
 	}
+
+	// //上边是错的，我们前端是经过筛选后发送的，所以这里不需要再筛选了
+	// //如果是7位，则为o7，否则为l10
+	// // 如果7位，则直接发送
 
 	// 如果未指定接口，使用默认接口
 	if ifName == "" {
@@ -442,7 +453,7 @@ func sendFingerPose(ifName string, pose []byte, handType string, handId uint32) 
 	handConfig := getHandConfig(ifName)
 	// 确保使用正确的接口名称
 
-	// O7_MODIFIED: 构造适合设备类型的CAN消息
+	// addo7:O7_MODIFIED: 构造适合设备类型的CAN消息
 	msg := createFingerPoseMessage(handConfig, ifName, perturbedPose, canId)
 
 	err := sendToCanService(msg)
@@ -452,7 +463,7 @@ func sendFingerPose(ifName string, pose []byte, handType string, handId uint32) 
 			handTypeName = "左手"
 		}
 
-		// O7_MODIFIED: 根据设备类型打印不同的日志
+		// addo7:O7_MODIFIED: 根据设备类型打印不同的日志
 		if handConfig.DeviceType == DEVICE_TYPE_O7 {
 			if len(perturbedPose) == 7 {
 				log.Printf("✅ %s (%s, 0x%X, %s) 手指动作已发送: [%X %X %X %X %X %X %X]",
@@ -479,7 +490,7 @@ func sendFingerPose(ifName string, pose []byte, handType string, handId uint32) 
 	return err
 }
 
-// O7_MODIFIED: 创建适合不同设备类型的掌部姿态消息
+// addo7:O7_MODIFIED: 创建适合不同设备类型的掌部姿态消息
 func createPalmPoseMessage(handConfig *HandConfig, ifName string, pose []byte) CanMessage {
 	var data []byte
 
@@ -514,8 +525,18 @@ func createPalmPoseMessage(handConfig *HandConfig, ifName string, pose []byte) C
 	}
 }
 
-// 发送掌部姿态指令 - 支持设备类型
+// addo7:O7_MODIFIED: 发送掌部姿态指令 - 支持设备类型
+// ifname: 接口名称“can0,can1”
+// pose: 掌部姿态数据
+// handType: 手型类型
+// handId: 手型对应指令码
+// deviceType: 设备型号
+
+// 这里没用我们设定好的接口，而是另外查询的，所以有错误。
+// 我们要直接使用ifName string, pose []byte, handType string, handId uint32构建然后发送
 func sendPalmPose(ifName string, pose []byte, handType string, handId uint32) error {
+
+	fmt.Println("sendPalmPose", ifName, pose, handType, handId)
 	if len(pose) != 4 {
 		return fmt.Errorf("无效的姿态数据长度，需要 4 个字节")
 	}
@@ -542,26 +563,30 @@ func sendPalmPose(ifName string, pose []byte, handType string, handId uint32) er
 	// 获取当前接口的手型配置
 	handConfig := getHandConfig(ifName)
 
-	// O7_MODIFIED: 构造适合设备类型的CAN消息
+	// addo7:O7_MODIFIED: 构造适合设备类型的CAN消息
 	msg := createPalmPoseMessage(handConfig, ifName, perturbedPose)
 
+	fmt.Println("sendPalmPose msg", msg)
+	palmmsg := CanMessage{
+		Interface: ifName,
+		ID:        handId,
+		Data:      []byte{0x04, pose[0], pose[1], pose[2], pose[3]},
+	}
+	sendToCanService(palmmsg)
+	fmt.Println("sendPalmPose palmmsg", palmmsg)
 	err := sendToCanService(msg)
+
 	if err == nil {
 		handTypeName := "右手"
 		if canId == HAND_TYPE_LEFT {
 			handTypeName = "左手"
 		}
 
-		// O7_MODIFIED: 根据设备类型显示不同的日志
-		if handConfig.DeviceType == DEVICE_TYPE_O7 {
-			log.Printf("✅ %s (%s, 0x%X, %s) 掌部姿态已发送（通过0x01指令）: [%X %X %X %X]",
-				ifName, handTypeName, canId, handConfig.DeviceType,
-				perturbedPose[0], perturbedPose[1], perturbedPose[2], perturbedPose[3])
-		} else {
-			log.Printf("✅ %s (%s, 0x%X, %s) 掌部姿态已发送: [%X %X %X %X]",
-				ifName, handTypeName, canId, handConfig.DeviceType,
-				perturbedPose[0], perturbedPose[1], perturbedPose[2], perturbedPose[3])
-		}
+		// addo7:	O7_MODIFIED: 根据设备类型显示不同的日志
+
+		log.Printf("✅ %s (%s, 0x%X, %s) 掌部姿态已发送: [%X %X %X %X]",
+			ifName, handTypeName, canId, handConfig.DeviceType,
+			perturbedPose[0], perturbedPose[1], perturbedPose[2], perturbedPose[3])
 
 		// 更新传感器数据中的掌部位置
 		sensorMutex.Lock()
@@ -577,7 +602,7 @@ func sendPalmPose(ifName string, pose []byte, handType string, handId uint32) er
 	return err
 }
 
-// O7_MODIFIED: 为O7设备发送关节速度
+// addo7:O7_MODIFIED: 为O7设备发送关节速度
 func sendJointSpeeds(ifName string, speeds []byte, handType string, handId uint32) error {
 	// 验证速度数据长度
 	deviceType := config.DeviceType
@@ -717,7 +742,7 @@ func startWaveAnimation(ifName string, speed int, handType string, handId uint32
 			log.Printf("👋 %s 波浪动画已完成", ifName)
 		}()
 
-		// O7_MODIFIED: 根据设备类型使用不同的动画参数
+		// addo7:O7_MODIFIED: 根据设备类型使用不同的动画参数
 		deviceType := config.DeviceType
 		if handConfig, exists := handConfigs[ifName]; exists {
 			deviceType = handConfig.DeviceType
@@ -851,7 +876,7 @@ func startSwayAnimation(ifName string, speed int, handType string, handId uint32
 			log.Printf("🔄 %s 横向摆动动画已完成", ifName)
 		}()
 
-		// O7_MODIFIED: 根据设备类型执行不同的动画
+		// addo7:O7_MODIFIED: 根据设备类型执行不同的动画
 		deviceType := config.DeviceType
 		if handConfig, exists := handConfigs[ifName]; exists {
 			deviceType = handConfig.DeviceType
@@ -1054,6 +1079,159 @@ func checkCanServiceStatus() map[string]bool {
 	return result
 }
 
+// 返回设备类型映射
+type DeviceMapping struct {
+	Hands map[string][]string `json:"hands"` // key: interface, value: [model, side]
+
+}
+
+// 从消息中找到最后一个长度为8、且第一位匹配的hex_data数组
+func findLastLength8HexData(messages []CanMessageLog, condition string) []string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Length == 8 {
+			if condition != "" {
+				if len(msg.HEX_Data) >= 1 && msg.HEX_Data[0] == condition {
+					return msg.HEX_Data
+				}
+				continue
+			}
+			return msg.HEX_Data
+		}
+	}
+	return nil
+}
+
+var Devicemaps = DeviceMapping{Hands: make(map[string][]string)}
+
+type CanMessageLog struct {
+	Interface string    `json:"interface"`
+	ID        uint32    `json:"id"`
+	Data      []byte    `json:"data"`
+	Length    uint8     `json:"length"`
+	Timestamp time.Time `json:"timestamp"`
+	Direction string    `json:"direction"`
+	HEX_ID    string    `json:"hex_id"`
+	HEX_Data  []string  `json:"hex_data"`
+}
+
+type CanApiResponseData struct {
+	Interface   string          `json:"interface"`
+	Messages    []CanMessageLog `json:"messages"`
+	Count       int             `json:"count"`
+	IsListening bool            `json:"isListening"`
+}
+type CanApiResponse struct {
+	CanApiResponse CanApiResponseData `json:"data"`
+	Status         string             `json:"status"`
+}
+
+// 判断设备是否为手部设备
+func isHand(baseURL, device string) ([]string, error) {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	postURL := baseURL + "/api/can"
+
+	deviceIDs := []uint32{0x27, 0x28}
+	for _, id := range deviceIDs {
+		listenURL := fmt.Sprintf("%s/api/messages/%s?id=0x%x", baseURL, device, id)
+		fmt.Println("listenURL", listenURL)
+		for attempt := 0; attempt < 20; attempt++ {
+			// 发送指令
+			canMessage := CanMessage{
+				Interface: device,
+				ID:        id,
+				Data:      []byte{0x64},
+			}
+			jsonData, _ := json.Marshal(canMessage)
+
+			resp, err := client.Post(postURL, "application/json", bytes.NewBuffer(jsonData))
+			if err != nil {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			resp.Body.Close()
+			// 接收数据
+			respGet, err := client.Get(listenURL)
+			if err != nil {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			defer respGet.Body.Close()
+
+			var apiResp CanApiResponse
+
+			body, err := io.ReadAll(respGet.Body)
+			if err != nil {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			//fmt.Println("body", string(body))
+			if err := json.Unmarshal(body, &apiResp); err != nil {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			//fmt.Println("apiResp", apiResp)
+			if len(apiResp.CanApiResponse.Messages) == 0 {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			//fmt.Println("apiResp.CanApiResponse.Messages", apiResp.CanApiResponse.Messages)
+			hexData := findLastLength8HexData(apiResp.CanApiResponse.Messages, "64")
+
+			if len(hexData) > 0 {
+				return hexData, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("无法识别设备 %s", device)
+}
+
+// 识别设备型号和左右手
+func getDeviceType(devices []string) (DeviceMapping, error) {
+	baseURL := "http://localhost:5260"
+	//result := DeviceMapping{Hands: make(map[string][]string)}
+
+	for _, dev := range devices {
+		hexData, err := isHand(baseURL, dev)
+		fmt.Println("hexData", hexData)
+		if err != nil || len(hexData) < 5 {
+			continue
+		}
+
+		var model, side string
+		switch hexData[1] {
+		case "0A":
+			model = "L10"
+		case "07":
+			model = "O7"
+		default:
+			continue
+		}
+
+		switch hexData[4] {
+		case "4C":
+			side = "left"
+		case "52":
+			side = "right"
+		default:
+			continue
+		}
+
+		Devicemaps.Hands[dev] = []string{model, side}
+	}
+
+	if len(Devicemaps.Hands) == 0 {
+		return Devicemaps, fmt.Errorf("未识别到任何已知设备")
+	}
+	return Devicemaps, nil
+}
+
+func Querymodels() (DeviceMapping, error) {
+	devices := config.AvailableInterfaces
+	fmt.Println("devices", devices)
+	return getDeviceType(devices)
+}
+
 // API 路由设置
 func setupRoutes(r *gin.Engine) {
 	r.StaticFile("/", "./static/index.html")
@@ -1061,7 +1239,23 @@ func setupRoutes(r *gin.Engine) {
 
 	api := r.Group("/api")
 	{
-		// O7_MODIFIED: 添加设备类型检查端点
+		api.GET("/Querymodels", func(c *gin.Context) {
+			res, err := Querymodels()
+			fmt.Println(res)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"status": "error",
+					"error":  err.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"status": "success",
+				"data":   res,
+			})
+		})
+
+		// addo7:O7_MODIFIED: 添加设备类型检查端点
 		api.GET("/device-type", func(c *gin.Context) {
 			c.JSON(http.StatusOK, ApiResponse{
 				Status: "success",
@@ -1280,7 +1474,7 @@ func setupRoutes(r *gin.Engine) {
 			})
 		})
 
-		// O7_MODIFIED: 添加关节速度控制API端点
+		// 添加关节速度控制API端点
 		api.POST("/speeds", func(c *gin.Context) {
 			var req SpeedRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -1315,48 +1509,13 @@ func setupRoutes(r *gin.Engine) {
 				})
 				return
 			}
-
+			fmt.Println("req", req)
 			// 确定设备类型
-			deviceType := config.DeviceType
-			if req.DeviceType != "" {
-				// 如果请求指定了设备类型
-				if req.DeviceType != DEVICE_TYPE_L10 && req.DeviceType != DEVICE_TYPE_O7 {
-					c.JSON(http.StatusBadRequest, ApiResponse{
-						Status: "error",
-						Error:  fmt.Sprintf("无效的设备类型 %s，有效类型: [L10, O7]", req.DeviceType),
-					})
-					return
-				}
-				deviceType = req.DeviceType
-
-				// 更新设备类型
-				handConfigMutex.Lock()
-				if handConfig, exists := handConfigs[req.Interface]; exists {
-					handConfig.DeviceType = req.DeviceType
-				}
-				handConfigMutex.Unlock()
-			} else if handConfig, exists := handConfigs[req.Interface]; exists {
-				deviceType = handConfig.DeviceType
-			}
-
-			// 验证速度数据长度
-			if deviceType == DEVICE_TYPE_O7 {
-				if len(req.Speeds) != 7 && len(req.Speeds) != 6 {
-					c.JSON(http.StatusBadRequest, ApiResponse{
-						Status: "error",
-						Error:  "O7设备需要7个关节速度值(或兼容L10的6个值)",
-					})
-					return
-				}
-			} else {
-				if len(req.Speeds) != 5 {
-					c.JSON(http.StatusBadRequest, ApiResponse{
-						Status: "error",
-						Error:  "L10设备需要5个手指的速度值",
-					})
-					return
-				}
-			}
+			deviceType := req.DeviceType
+			config.DeviceType = deviceType
+			handConfigMutex.Lock()
+			handConfigs[req.Interface].DeviceType = deviceType
+			handConfigMutex.Unlock()
 
 			if err := sendJointSpeeds(req.Interface, req.Speeds, req.HandType, req.HandId); err != nil {
 				c.JSON(http.StatusInternalServerError, ApiResponse{
@@ -1373,6 +1532,30 @@ func setupRoutes(r *gin.Engine) {
 					"interface":  req.Interface,
 					"speeds":     req.Speeds,
 					"deviceType": deviceType,
+				},
+			})
+		})
+
+		// 添加扭矩控制API端点
+		api.POST("/torque", func(c *gin.Context) {
+
+			var req TorqueRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, ApiResponse{
+					Status: "error",
+					Error:  "无效的扭矩数据: " + err.Error(),
+				})
+				return
+			}
+
+			fmt.Println("req", req)
+			sendJointTorque(req.Interface, req.Data, req.HandId)
+			c.JSON(http.StatusOK, ApiResponse{
+				Status:  "success",
+				Message: "关节扭矩指令发送成功",
+				Data: map[string]interface{}{
+					"interface": req.Interface,
+					"torque":    req.Data,
 				},
 			})
 		})
@@ -1681,7 +1864,163 @@ func setupRoutes(r *gin.Engine) {
 				},
 			})
 		})
+		api.POST("/sendspeed", func(c *gin.Context) {
+			var req CanMessage
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, ApiResponse{
+					Status: "error",
+					Error:  "无效的速度数据: " + err.Error(),
+				})
+				return
+			}
+			sendToCanService(req)
+			c.JSON(http.StatusOK, ApiResponse{
+				Status:  "success",
+				Message: "速度数据已发送",
+			})
+		})
+		//应付魔搭MCP  PPT
+		api.POST("/sendMCPpose", func(c *gin.Context) {
+
+			// // 1. 读取原始 Body 数据
+			// bodyBytes, err := io.ReadAll(c.Request.Body)
+			// if err != nil {
+			// 	c.JSON(http.StatusBadRequest, ApiResponse{
+			// 		Status: "error",
+			// 		Error:  "读取请求体失败: " + err.Error(),
+			// 	})
+			// 	return
+			// }
+
+			// // 2. 打印原始 Body (调试用)
+			// bodyString := string(bodyBytes)
+			// fmt.Println("Raw Request Body:", bodyString)
+			// // 3. 将读出的 Body 重新写回，以便后续操作使用
+			// c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			var req MCPposeRequest
+			// 绑定 JSON 请求体到 MCPposeRequest 结构体
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, ApiResponse{
+					Status: "error",
+					Error:  "无效的手指数据: " + err.Error(),
+				})
+				return
+			}
+			fmt.Println("req", req)
+			sendMCPpose(req.Gesture)
+			//sendToCanService(req)
+			c.JSON(http.StatusOK, ApiResponse{
+				Status:  "success",
+				Message: "手指数据已发送",
+			})
+		})
 	}
+}
+
+// 应付魔搭MCP  PPT
+func sendMCPpose(gesture string) {
+	var fingerPose []byte
+
+	// MCPposeRequest 结构体的处理逻辑
+	switch gesture {
+	case "fist":
+		fingerPose = []byte{40, 40, 40, 40, 40, 40}
+	case "wave":
+		fingerPose = []byte{192, 192, 192, 192, 192, 192}
+		//给一些掌部动作
+	case "first":
+		fingerPose = []byte{0, 57, 255, 0, 0, 0}
+	case "thumbsup":
+		fingerPose = []byte{255, 255, 0, 0, 0, 0}
+	case "yeah":
+		fingerPose = []byte{0, 103, 255, 255, 0, 0}
+	default:
+		fmt.Println("无效的 MCPpose 手势")
+	}
+	// 这里可以添加实际发送 MCPpose 请求的代码
+	fmt.Println("Sending MCPpose request...")
+	//判断类型，给所有的can发送 MCPpose 请求
+
+	fmt.Println()
+
+	for ifName, dev := range Devicemaps.Hands {
+		fmt.Println("Sending MCPpose to interface:", ifName, "with pose:", fingerPose, "HandType:", dev[0], "HandId:", dev[1])
+		HandId := uint32(0)
+		switch dev[1] {
+		case "left":
+			// 左手设备
+			HandId = HAND_TYPE_LEFT
+		case "right":
+			// 右手设备
+			HandId = HAND_TYPE_RIGHT
+		default:
+			fmt.Println("未知的手型类型:", dev[1])
+			continue
+		}
+		sendFingerPose(ifName, fingerPose, dev[0], HandId)
+	}
+	if gesture == "wave" {
+		sendMCPPlam(gesture)
+	}
+
+}
+
+// 应付魔搭MCP  PPT 发送 MCPpose 掌部请求
+func sendMCPPlam(gesture string) {
+	fmt.Println("Sending MCPpose palm request...", gesture)
+	// 默认姿势 - 对两种设备类型都适用
+	leftPose := []byte{20, 20, 20, 20}
+	rightPose := []byte{230, 230, 230, 230}
+	for i := 0; i < 2; i++ {
+		for ifName, dev := range Devicemaps.Hands {
+			HandId := uint32(0)
+			switch dev[1] {
+			case "left":
+				// 左手设备
+				HandId = HAND_TYPE_LEFT
+			case "right":
+				// 右手设备
+				HandId = HAND_TYPE_RIGHT
+			default:
+				fmt.Println("未知的手型类型:", dev[1])
+				continue
+			}
+			sendPalmPose(ifName, leftPose, dev[0], HandId)
+			time.Sleep(500 * time.Millisecond) // 确保发送间隔
+			sendPalmPose(ifName, rightPose, dev[0], HandId)
+		}
+		time.Sleep(1000 * time.Millisecond) // 确保发送间隔
+	}
+
+}
+
+// 应付魔搭MCP  PPT
+type MCPposeRequest struct {
+	Gesture     string  `json:"gesture"`
+	Description string  `json:"description"`
+	Duration    float64 `json:"duration"`
+	Speed       float64 `json:"speed"`
+}
+
+// addo7:O7_MODIFIED: 发送关节扭矩
+func sendJointTorque(s string, b []byte, u uint32) {
+	command := CanMessage{
+		Interface: s,
+		ID:        u,
+		Data:      append([]byte{0x02}, b...),
+	}
+	fmt.Println("sendJointTorque", command)
+	sendToCanService(command)
+	fmt.Println("sendJointTorque", command)
+
+}
+
+// addo7:O7_MODIFIED: 发送关节扭矩请求
+type TorqueRequest struct {
+	Interface  string `json:"interface"`
+	Data       []byte `json:"data"`
+	HandId     uint32 `json:"handId"`
+	DeviceType string `json:"deviceType"`
 }
 
 func printUsage() {
@@ -1708,7 +2047,7 @@ func printUsage() {
 	fmt.Println("  ./control-service -can-interfaces can0,can1,vcan0")
 	fmt.Println("  ./control-service -interface can1 -can-interfaces can0,can1")
 	fmt.Println("  CAN_INTERFACES=can0,can1,vcan0 ./control-service")
-	fmt.Println("  CAN_SERVICE_URL=http://localhost:8080 ./control-service")
+	fmt.Println("  CAN_SERVICE_URL=http://localhost:5260 ./control-service")
 }
 
 func main() {
@@ -1776,13 +2115,15 @@ func main() {
 
 // 在 base 基础上进行 ±delta 的扰动，范围限制在 [0, 255]
 func perturb(base byte, delta int) byte {
-	offset := rand.Intn(2*delta+1) - delta
-	v := int(base) + offset
-	if v < 0 {
-		v = 0
-	}
-	if v > 255 {
-		v = 255
-	}
-	return byte(v)
+	return base
+
+	// offset := rand.Intn(2*delta+1) - delta
+	// v := int(base) + offset
+	// if v < 0 {
+	// 	v = 0
+	// }
+	// if v > 255 {
+	// 	v = 255
+	// }
+	// return byte(v)
 }

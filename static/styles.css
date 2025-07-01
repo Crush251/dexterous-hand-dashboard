@@ -353,3 +353,19 @@ button.global:hover {
         grid-template-columns: 1fr;
     }
 }
+
+/* 手部元素高亮效果 */
+.highlight-update {
+    animation: highlight-update-animation 2s ease;
+    box-shadow: 0 0 15px rgba(46, 204, 113, 0.8);
+}
+
+@keyframes highlight-update-animation {
+    0% { transform: scale(1); }
+    10% { transform: scale(1.05); }
+    20% { transform: scale(1); }
+    30% { transform: scale(1.05); }
+    40% { transform: scale(1); }
+    50% { background-color: rgba(46, 204, 113, 0.3); }
+    100% { background-color: transparent; }
+}
